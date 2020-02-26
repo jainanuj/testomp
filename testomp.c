@@ -34,7 +34,20 @@ int least_bit(unsigned long map)
     return -1;
  //*/
 }
-
+void fn()
+{
+    int TID;
+    printf("Nested parallelism is %s\n", omp_get_nested() ? "supported" : "not supported");
+#pragma omp parallel private(TID)
+    {
+        TID = omp_get_thread_num();
+        printf("Thread %d executes the outer parallel region\n",TID);
+#pragma omp parallel num_threads(2) firstprivate(TID)
+        {
+            printf("TID %d: Thread %d executes inner parallel region\n", TID,omp_get_thread_num());
+        } /*--Endofinnerparallelregion--*/
+    }   //End of outer parallel.
+}
 
 main(int argc, char *argv[]) {
     
@@ -45,7 +58,8 @@ main(int argc, char *argv[]) {
     bit_pos = least_bit(x);
     printf("The bit pos for %lu was:%d\n\n",x,bit_pos);
     omp_set_num_threads(8);
-    
+    fn();
+/*
 #pragma omp parallel for default(shared) private(i, delta, tid)  \
     schedule(dynamic,chunk)      \
     reduction(max:result)
@@ -57,7 +71,7 @@ main(int argc, char *argv[]) {
         printf("Thread:%d,Itr:%d,delta=%d,result=%d\n",tid,i,delta,result);
     }
     printf("Final result = %d\n",result);
-    
+ */
 }
 
 void fn2()
