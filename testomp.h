@@ -11,6 +11,13 @@
 
 #include <stdio.h>
 void testparallelfn(int xid);
+void fn();
+void fn2();
+void sectioning();
+void tasking();
+void simplyParll();
+void processItem(int i, int **threadExecCounter);
+void printbindinginfo();
 #define DEBSEQ 0x077CB531
 #define MAX_DEB_SEQ_SIZE 0xFFFFFFFF
 #define DEB_SEQ_REM_WINDOW 27
