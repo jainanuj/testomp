@@ -37,11 +37,11 @@ int least_bit(unsigned long map)
 void fn()
 {
     int TID;
-//    omp_set_max_active_levels(2);
-//    int numlevels = omp_get_max_active_levels();
+    omp_set_max_active_levels(2);
+    int numlevels = omp_get_max_active_levels();
     int n_socks = omp_get_num_places();
-    //printf("Nested parallelism is %s\n", omp_get_nested() ? "supported" : "not supported");
-//    printf("Num levels supported =%d; Num sockets=%d\n",numlevels, n_socks);
+    printf("Nested parallelism is %s\n", omp_get_nested() ? "supported" : "not supported");
+    printf("Num levels supported =%d; Num sockets=%d\n",numlevels, n_socks);
     
     int n_procs = omp_get_place_num_procs(0);
     printf("Num procs=%d\n", n_procs);
@@ -73,10 +73,8 @@ main(int argc, char *argv[]) {
 //    printf("Will be testing tasks:\n");
 //    tasking();
     
-    simplyParll();
-#pragma omp parallel
-    #pragma omp single
-        printbindinginfo();
+//    simplyParll();
+      printbindinginfo();
 /*
 #pragma omp parallel for default(shared) private(i, delta, tid)  \
     schedule(dynamic,chunk)      \
@@ -238,18 +236,43 @@ void simplyParll()
 
 void printbindinginfo()
 {
+#pragma omp parallel num_threads(10) proc_bind(spread)
+{
     int my_place = omp_get_place_num();
     int place_num_procs = omp_get_place_num_procs(my_place);
     int i;
-    printf("Place consists of %d processors: ", place_num_procs);
-    
+    int TID = omp_get_thread_num();
+    printf("(Place, thread): (%d, %d) consists of %d processors: \n", my_place, TID, place_num_procs);
+#pragma omp flush
+#pragma omp barrier
+
     int *place_processors = malloc(sizeof(int) * place_num_procs);
     omp_get_place_proc_ids(my_place, place_processors);
-    
+#pragma omp critical
+    {
     for (i = 0; i< place_num_procs; i++)
         printf("%d ", place_processors[i]);
     printf("\n");
-    //free(place_processors);
+    }
+   #pragma omp flush
+   #pragma omp barrier
+    #pragma omp parallel num_threads(2) firstprivate(TID) private(my_place, place_num_procs) proc_bind(close)
+    {
+#pragma omp critical
+	    {
+        my_place = omp_get_place_num();
+        place_num_procs = omp_get_place_num_procs(my_place);
+        printf("(Inner Place, Out_TID, in_thrd): (%d, %d, %d) consists of %d processors: ",my_place, TID, omp_get_thread_num(), place_num_procs);
+        int *inner_place_processors = malloc(sizeof(int) * place_num_procs);
+        omp_get_place_proc_ids(my_place, inner_place_processors);
+          for (i = 0; i< place_num_procs; i++)
+             printf("%d ", inner_place_processors[i]);
+          printf("\n");
+#pragma omp flush
+	    }
+    }
+//free(place_processors);
+}
 }
 
 void processItem(int i, int **threadExecCounter)
