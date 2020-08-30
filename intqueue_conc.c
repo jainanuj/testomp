@@ -125,9 +125,10 @@ int queue_conc_add( queue_conc *q, int obj )
         ok = __sync_bool_compare_and_swap(&(q->items[ ((q->end_item_ptr + 1 ) % q->maxNumInts) ]), EMPTYVAL, END_PLACE);
         if (ok)
         {
-            if (check_bit_obj_present_conc(q->bitqueue_conc, obj) )     //Q couldn't be full here as there was an emptyval just replaced by end_place
+            if (!queue_conc_add_bit(q->bitqueue_conc, obj))
             { //The obj that this thread wanted to add was already added by antother thread or some other threads already made the q full.
                 q->items[ ((q->end_item_ptr + 1 ) % q->maxNumInts) ] = EMPTYVAL;
+#pragma omp flush
                 return 1;
             }
         }
@@ -135,7 +136,7 @@ int queue_conc_add( queue_conc *q, int obj )
             return 1;
     }
     q->items[ q->end_item_ptr ] = obj;
-    queue_conc_add_bit(q->bitqueue_conc, obj);
+    //queue_conc_add_bit(q->bitqueue_conc, obj);
     q->numitems++;
     q->end_item_ptr = ((q->end_item_ptr + 1 ) % q->maxNumInts);       //Finally increment the end_item_ptr. This will release next thread
 #pragma omp flush
@@ -169,6 +170,7 @@ int queue_conc_pop(queue_conc *q, int *result )
             {
                 //fprintf( stderr, "Hey! queue's empty!\n" );
                 q->items[q->start_item_ptr] = START_PLACE;
+#pragma omp flush
                 return 0;
             }
         }
@@ -277,7 +279,7 @@ int bit_queue_conc_pop( bit_queue_conc *bq, int obj )
 #pragma omp flush
         currentVal = bq->bit_arrays[index_bit_array];
         if (currentVal & number_bit_unset)      //Only if bit present.
-            ok = __sync_bool_compare_and_swap(bq->bit_arrays[index_bit_array], currentVal, bq->bit_arrays[index_bit_array] & number_bit_unset_comp);
+            ok = __sync_bool_compare_and_swap(&(bq->bit_arrays[index_bit_array]), currentVal, currentVal & number_bit_unset_comp);
         else
             return 0;       //Bit already unset by somebody else.
         if (ok)
@@ -306,7 +308,7 @@ int queue_conc_add_bit( bit_queue_conc *bq, int obj )
         #pragma omp flush
         currentVal = bq->bit_arrays[index_bit_array];
         if (!(currentVal & number_bitset) )
-            ok = __sync_bool_compare_and_swap(&(bq->bit_arrays[index_bit_array]), currentVal, bq->bit_arrays[index_bit_array] & number_bitset );
+            ok = __sync_bool_compare_and_swap(&(bq->bit_arrays[index_bit_array]), currentVal, currentVal & number_bitset );
         else
             return 0;       //Somebody else set the same bit.
         if (ok)
