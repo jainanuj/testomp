@@ -77,6 +77,7 @@ void destroy_queue(queue_conc *q)
 
 int empty_queue_conc( queue_conc *q)
 {
+    int i = 0;
     q->numitems = 0;
     q->start_item_ptr = 0;
     q->end_item_ptr = 1;
@@ -277,7 +278,7 @@ int bit_queue_conc_pop( bit_queue_conc *bq, int obj )
 #pragma omp flush
         currentVal = bq->bit_arrays[index_bit_array];
         if (currentVal & number_bit_unset)      //Only if bit present.
-            ok = __sync_bool_compare_and_swap(bq->bit_arrays[index_bit_array], currentVal, bq->bit_arrays[index_bit_array] & number_bit_unset_comp);
+            ok = __sync_bool_compare_and_swap(&(bq->bit_arrays[index_bit_array]), currentVal, bq->bit_arrays[index_bit_array] & number_bit_unset_comp);
         else
             return 0;       //Bit already unset by somebody else.
         if (ok)
