@@ -77,6 +77,7 @@ void destroy_queue(queue_conc *q)
 
 int empty_queue_conc( queue_conc *q)
 {
+    int i = 0;
     q->numitems = 0;
     q->start_item_ptr = 0;
     q->end_item_ptr = 1;
