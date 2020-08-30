@@ -20,7 +20,7 @@
 */
 
 
-int check_obj_present_in_q(queue* q, int obj)
+int check_obj_present_in_q(queue_conc* q, int obj)
 {
     int items_scanned = 0;
     int i = q->start_item_ptr;
@@ -80,7 +80,7 @@ queue_conc *queue_conc_create( int maxitems, int max_val )
   return q;
 }
 
-void destroy_queue(queue *q)
+void destroy_queue(queue_conc *q)
 {
 #ifdef BITQ
     destroy_bit_queue(q->bitqueue);
@@ -114,7 +114,7 @@ int queue_conc_add( queue_conc *q, int obj )
 //    double t_start, t_end;
 //    t_start = whenq();
 
-    bool ok = false;
+    int ok = 0;
 #ifndef BITQ_CONC
     pos = check_obj_present_in_q(q, obj);
     if (pos != -1)
@@ -158,11 +158,11 @@ int queue_conc_add( queue_conc *q, int obj )
 // ----------------------------------------------------------------------------
 //
 
-int queue_pop(queue *q, int *result )
+int queue_pop(queue_conc *q, int *result )
 {
 //    double t_start, t_end;
 //    t_start = whenq();
-    bool ok = false;
+    int ok = 0;
     *result = -1;
     if ( (q->numitems <= 0) || (q->start_item_ptr < 0) || (q->items[((q->start_item_ptr + 1 ) % q->maxitems)] == END_PLACE))
     {
@@ -203,12 +203,12 @@ int queue_pop(queue *q, int *result )
 
 
 
-int queue_has_items(queue *q)
+int queue_has_items(queue_conc *q)
 {
     return q->numitems;
 }
 
-int bit_queue_has_items(bit_queue *bq)
+int bit_queue_has_items(bit_queue_conc *bq)
 {
     return bq->num_items;
 }
@@ -216,11 +216,11 @@ int bit_queue_has_items(bit_queue *bq)
 
 /*********----------------------------------------------------**************/
 
-bit_queue *create_bit_queue( int max_items)
+bit_queue_conc *create_bit_queue_conc( int max_items)
 {
-    bit_queue *bq;
+    bit_queue_conc *bq;
     int num_bit_arrays, i;
-    bq = (bit_queue *)malloc(sizeof(bit_queue));
+    bq = (bit_queue_conc *)malloc(sizeof(bit_queue_conc));
     if (bq == NULL) {
         fprintf(stderr, "Out of memory!\n");
         exit(0);
@@ -242,7 +242,7 @@ bit_queue *create_bit_queue( int max_items)
     
 }
 
-int empty_bit_queue(bit_queue *bq)
+int empty_bit_queue_conc(bit_queue_conc *bq)
 {
     //int i;
     memset(bq->bit_arrays, 0, sizeof(unsigned long)*bq->max_bit_arrays);
@@ -254,7 +254,7 @@ int empty_bit_queue(bit_queue *bq)
     return 0;
 }
 
-unsigned long check_bit_obj_present( bit_queue *bq, int obj )
+unsigned long check_bit_obj_present_conc( bit_queue_conc *bq, int obj )
 {
     int index_bit_array = obj/BIT_ARRAY_SIZE;       //index of the bit array to use.
     int set_bit = obj - (index_bit_array * BIT_ARRAY_SIZE);     //The index of bit to be set in the chosen bit array
@@ -268,7 +268,7 @@ unsigned long check_bit_obj_present( bit_queue *bq, int obj )
     return (bq->bit_arrays[index_bit_array] & number_bitset);
 }
 
-int bit_queue_pop( bit_queue *bq, int obj )
+int bit_queue_conc_pop( bit_queue_conc *bq, int obj )
 {
     int index_bit_array = obj/BIT_ARRAY_SIZE;       //index of the bit array to use.
     int set_bit = obj - (index_bit_array * BIT_ARRAY_SIZE);     //The index of bit to be set in the chosen bit array
@@ -287,7 +287,7 @@ int bit_queue_pop( bit_queue *bq, int obj )
     
 }
 
-int bit_queue_last_item(bit_queue *bq)
+int bit_queue_last_item(bit_queue_conc *bq)
 {
     int i = 0, least_bit_set = -1;
     while (i < bq->max_bit_arrays)
@@ -300,41 +300,9 @@ int bit_queue_last_item(bit_queue *bq)
     return -1;
 }
 
-int least_bit(unsigned long map)
-{
-    unsigned long x;//unsigned long only_least_bit = 0;
-    int least_bit_pos = 0;
-    if (map <= 0)
-        return -1;
-    for (least_bit_pos=0; least_bit_pos < BIT_ARRAY_SIZE; least_bit_pos++)
-    {
-        x = map >> least_bit_pos;
-        if (x & 1)
-            return least_bit_pos;
-    }
-    return -1;
-
-/*    only_least_bit = map & ~(map-1);
-    least_bit_pos = DEBRUIJNBITPOS[ ((only_least_bit * DEBSEQ) & MAX_DEB_SEQ_SIZE) >> DEB_SEQ_REM_WINDOW];
-    return least_bit_pos;*/
-}
-
-int least_bit_deb(unsigned long map)
-{
-    unsigned long only_least_bit = 0;
-    int least_bit_pos = 0;
-    if (map <= 0)
-        return -1;
-     only_least_bit = map & ~(map-1);
-     least_bit_pos = DEBRUIJNBITPOS[ ((only_least_bit * DEBSEQ) & MAX_DEB_SEQ_SIZE) >> DEB_SEQ_REM_WINDOW];
-     return least_bit_pos;
-}
 
 
-
-
-
-int queue_add_bit( bit_queue *bq, int obj )
+int queue_conc_add_bit( bit_queue_conc *bq, int obj )
 {
     int index_bit_array = obj/BIT_ARRAY_SIZE;       //index of the bit array to use.
     int set_bit = obj - (index_bit_array * BIT_ARRAY_SIZE);     //The index of bit to be set in the chosen bit array
@@ -353,33 +321,14 @@ int queue_add_bit( bit_queue *bq, int obj )
     return 1;
 }
 
-void Or_bit_queue(bit_queue *bq_dest, bit_queue *bq_to_add)
-{
-    int indexArray = 0;
-    unsigned long temp = 0;
-    int new_bits_added = 0;
-    for (indexArray = 0; indexArray < bq_to_add->max_bit_arrays; indexArray++)
-    {
-        temp = ~(bq_dest->bit_arrays[indexArray]);
-        temp = temp & bq_to_add->bit_arrays[indexArray];
-        while (temp > 0)        //Count number of new bits added for this index.
-        {
-            temp &= (temp-1);
-            new_bits_added++;
-        }
-        bq_dest->bit_arrays[indexArray] |= bq_to_add->bit_arrays[indexArray];
-    }
-    bq_dest->num_items += new_bits_added;
-    return;
-}
 
-void destroy_bit_queue(bit_queue *bq)
+void destroy_bit_queue(bit_queue_conc *bq)
 {
     free(bq->bit_arrays);
     free (bq);
 }
 
-void print_bit_queue(bit_queue *bq, char *bit_queue_file)
+void print_bit_queue(bit_queue_conc *bq, char *bit_queue_file)
 {
     unsigned long number_bitset = 0x1, current_bitArray;        //The number with the required bit set.
     FILE *f_bitfile;
@@ -387,7 +336,7 @@ void print_bit_queue(bit_queue *bq, char *bit_queue_file)
     
     f_bitfile = fopen( bit_queue_file, "wb" );
     if ( f_bitfile == NULL ) {
-        wlog( 1, "Error opening %s!\n", bit_queue_file );
+        printf("Error opening %s!\n", bit_queue_file );
         return;
     }
     for (indexArray = 0; indexArray < bq->max_bit_arrays; indexArray++)

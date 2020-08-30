@@ -12,7 +12,7 @@
 #include <string.h>
 
 
-#include "logger.h"
+//#include "logger.h"
 
 #ifndef _PART_QUEUE_CONC_H
 #define _PART_QUEUE_CONC_H
@@ -26,6 +26,8 @@
 */
 
 #define BITQ_CONC 1
+#define BIT_ARRAY_SIZE 31
+#define MAX_DEB_SEQ_SIZE 0xFFFFFFFF
 
 #define END_PLACE -4
 #define START_PLACE -2
