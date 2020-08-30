@@ -20,22 +20,6 @@
 */
 
 
-int check_obj_present_in_q(queue_conc* q, int obj)
-{
-    int items_scanned = 0;
-    int i = q->start_item_ptr;
-    for (items_scanned = 0; items_scanned < q->numitems; items_scanned++)
-    {
-        if (q->items[i] == obj)
-            return i;
-        else
-            i = ((i + 1)  % q->maxitems);
-    }
-    
-    return -1;
-}
-
-
 //
 // ----------------------------------------------------------------------------
 //
@@ -56,8 +40,9 @@ queue_conc *queue_conc_create( int maxitems, int max_val )
 
   q->maxitems = maxitems;
   q->numitems = 0;
+  q->maxNumInts = maxitems + 2;
 
-  q->items = (int *)malloc( (maxitems + 2) * sizeof(int) );
+  q->items = (int *)malloc( q->maxNumInts * sizeof(int) );
   if (q->items == NULL) {
     fprintf(stderr, "Out of memory!\n");
     exit(0);
@@ -66,7 +51,7 @@ queue_conc *queue_conc_create( int maxitems, int max_val )
     q->end_item_ptr = 1;
     q->items[q->start_item_ptr] = START_PLACE;
     q->items[q->end_item_ptr] = END_PLACE;
-    for (i = 2; i < (maxitems + 2); i++)
+    for (i = 2; i < q->maxNumInts; i++)
     {
         q->items[i] = EMPTYVAL;
     }
@@ -93,10 +78,14 @@ void destroy_queue(queue_conc *q)
 int empty_queue_conc( queue_conc *q)
 {
     q->numitems = 0;
-    q->end_item_ptr = 1;
     q->start_item_ptr = 0;
+    q->end_item_ptr = 1;
     q->items[q->start_item_ptr] = START_PLACE;
     q->items[q->end_item_ptr] = END_PLACE;
+    for (i = 2; i < q->maxNumInts; i++)
+    {
+        q->items[i] = EMPTYVAL;
+    }
 #ifdef BITQ_CONC
     empty_bit_queue_conc(q->bitqueue_conc);
 #endif
@@ -113,8 +102,8 @@ int queue_conc_add( queue_conc *q, int obj )
 {
 //    double t_start, t_end;
 //    t_start = whenq();
-
     int ok = 0;
+    
 #ifndef BITQ_CONC
     pos = check_obj_present_in_q(q, obj);
     if (pos != -1)
@@ -133,12 +122,12 @@ int queue_conc_add( queue_conc *q, int obj )
     while (!ok)
     {
 #pragma omp flush
-        ok = __sync_bool_compare_and_swap(&(q->items[ ((q->end_item_ptr + 1 ) % q->maxitems) ]), EMPTYVAL, END_PLACE);
+        ok = __sync_bool_compare_and_swap(&(q->items[ ((q->end_item_ptr + 1 ) % q->maxNumInts) ]), EMPTYVAL, END_PLACE);
         if (ok)
         {
-            if (check_bit_obj_present_conc(q->bitqueue_conc, obj) )
+            if (check_bit_obj_present_conc(q->bitqueue_conc, obj) )     //Q couldn't be full here as there was an emptyval just replaced by end_place
             { //The obj that this thread wanted to add was already added by antother thread or some other threads already made the q full.
-                q->items[ ((q->end_item_ptr + 1 ) % q->maxitems) ] = EMPTYVAL;
+                q->items[ ((q->end_item_ptr + 1 ) % q->maxNumInts) ] = EMPTYVAL;
                 return 1;
             }
         }
@@ -148,7 +137,7 @@ int queue_conc_add( queue_conc *q, int obj )
     q->items[ q->end_item_ptr ] = obj;
     queue_conc_add_bit(q->bitqueue_conc, obj);
     q->numitems++;
-    q->end_item_ptr = ((q->end_item_ptr + 1 ) % q->maxitems);       //Finally increment the end_item_ptr. This will release next thread
+    q->end_item_ptr = ((q->end_item_ptr + 1 ) % q->maxNumInts);       //Finally increment the end_item_ptr. This will release next thread
 #pragma omp flush
     
     return 0;
@@ -158,13 +147,13 @@ int queue_conc_add( queue_conc *q, int obj )
 // ----------------------------------------------------------------------------
 //
 
-int queue_pop(queue_conc *q, int *result )
+int queue_conc_pop(queue_conc *q, int *result )
 {
 //    double t_start, t_end;
 //    t_start = whenq();
     int ok = 0;
     *result = -1;
-    if ( (q->numitems <= 0) || (q->start_item_ptr < 0) || (q->items[((q->start_item_ptr + 1 ) % q->maxitems)] == END_PLACE))
+    if ( (q->numitems <= 0) || (q->start_item_ptr < 0) || (q->items[((q->start_item_ptr + 1 ) % q->maxNumInts)] == END_PLACE))
     {
         //fprintf( stderr, "Hey! queue's empty!\n" );
         return 0;
@@ -176,24 +165,24 @@ int queue_pop(queue_conc *q, int *result )
         ok = __sync_bool_compare_and_swap(&(q->items[q->start_item_ptr]), START_PLACE, START_TRANS);
         if (ok)
         {
-            if ( (q->numitems <= 0) || (q->start_item_ptr < 0) || (q->items[((q->start_item_ptr + 1 ) % q->maxitems)] == END_PLACE))
+            if ( (q->numitems <= 0) || (q->start_item_ptr < 0) || (q->items[((q->start_item_ptr + 1 ) % q->maxNumInts)] == END_PLACE))
             {
                 //fprintf( stderr, "Hey! queue's empty!\n" );
                 q->items[q->start_item_ptr] = START_PLACE;
                 return 0;
             }
         }
-        else if ( (q->numitems <= 0) || (q->start_item_ptr < 0) || (q->items[((q->start_item_ptr + 1 ) % q->maxitems)] == END_PLACE))
+        else if ( (q->numitems <= 0) || (q->start_item_ptr < 0) || (q->items[((q->start_item_ptr + 1 ) % q->maxNumInts)] == END_PLACE))
         {
             return 0;
         }
     }
-    *result = q->items[((q->start_item_ptr + 1 ) % q->maxitems)];
-    q->items[((q->start_item_ptr + 1 ) % q->maxitems)] = START_PLACE;
+    *result = q->items[((q->start_item_ptr + 1 ) % q->maxNumInts)];
+    q->items[((q->start_item_ptr + 1 ) % q->maxNumInts)] = START_PLACE;
     q->items[q->start_item_ptr] = EMPTYVAL;
     q->numitems--;
     bit_queue_conc_pop(q->bitqueue_conc, *result);
-    q->start_item_ptr = ((q->start_item_ptr + 1 ) % q->maxitems);   //This will release other threads waiting to pop.
+    q->start_item_ptr = ((q->start_item_ptr + 1 ) % q->maxNumInts);   //This will release other threads waiting to pop.
 #pragma omp flush
 
 //    t_end = whenq();
@@ -244,13 +233,9 @@ bit_queue_conc *create_bit_queue_conc( int max_items)
 
 int empty_bit_queue_conc(bit_queue_conc *bq)
 {
-    //int i;
     memset(bq->bit_arrays, 0, sizeof(unsigned long)*bq->max_bit_arrays);
-/*    for (i = 0; i < bq->max_bit_arrays; i++)
-    {
-        bq->bit_arrays[i] = 0;
-    }*/
     bq->num_items = 0;
+#pragma omp flush
     return 0;
 }
 
@@ -265,6 +250,7 @@ unsigned long check_bit_obj_present_conc( bit_queue_conc *bq, int obj )
         exit(0);
     }
     //will return non-zero if the bit is already set else zero.
+#pragma omp flush
     return (bq->bit_arrays[index_bit_array] & number_bitset);
 }
 
@@ -272,51 +258,59 @@ int bit_queue_conc_pop( bit_queue_conc *bq, int obj )
 {
     int index_bit_array = obj/BIT_ARRAY_SIZE;       //index of the bit array to use.
     int set_bit = obj - (index_bit_array * BIT_ARRAY_SIZE);     //The index of bit to be set in the chosen bit array
-    unsigned long number_bit_unset = 0x1 << set_bit;        //The number with the required bit set.
+    unsigned long number_bit_unset = 0x1 << set_bit, number_bit_unset_comp, currentVal;        //The number with the required bit set.
+    int ok = 0;
+    
+    number_bit_unset_comp = (~number_bit_unset) & MAX_DEB_SEQ_SIZE;
+    
     if (!(bq->bit_arrays[index_bit_array] & number_bit_unset))
         return 1;           //bit not in the queue so nothing to do.
-    number_bit_unset = (~number_bit_unset) & MAX_DEB_SEQ_SIZE;
     if ( (set_bit > BIT_ARRAY_SIZE) || (index_bit_array >= bq->max_bit_arrays) )
     {
         fprintf(stderr, "Bit manip problem!\n");
         exit(0);
     }
-    bq->bit_arrays[index_bit_array] &= number_bit_unset;  //set the bit corresponding to obj as 0
-    bq->num_items--;
-    return 1;
     
-}
-
-int bit_queue_last_item(bit_queue_conc *bq)
-{
-    int i = 0, least_bit_set = -1;
-    while (i < bq->max_bit_arrays)
+    ok = 0;
+    while (!ok)
     {
-        least_bit_set = least_bit(bq->bit_arrays[i]);
-        if ((least_bit_set >= 0 ) && (least_bit_set < BIT_ARRAY_SIZE))
-            return (least_bit_set + i*BIT_ARRAY_SIZE);
-        i++;
+#pragma omp flush
+        currentVal = bq->bit_arrays[index_bit_array];
+        if (currentVal & number_bit_unset)      //Only if bit present.
+            ok = __sync_bool_compare_and_swap(bq->bit_arrays[index_bit_array], currentVal, bq->bit_arrays[index_bit_array] & number_bit_unset_comp);
+        else
+            return 0;       //Bit already unset by somebody else.
+        if (ok)
+            bq->num_items--;
     }
-    return -1;
+    return 1;
 }
-
-
 
 int queue_conc_add_bit( bit_queue_conc *bq, int obj )
 {
     int index_bit_array = obj/BIT_ARRAY_SIZE;       //index of the bit array to use.
     int set_bit = obj - (index_bit_array * BIT_ARRAY_SIZE);     //The index of bit to be set in the chosen bit array
-    unsigned long number_bitset = 0x1 << set_bit;        //The number with the required bit set.
+    unsigned long number_bitset = 0x1 << set_bit, currentVal;        //The number with the required bit set.
+    int ok = 0;
+    
     if ( (set_bit > BIT_ARRAY_SIZE) || (index_bit_array >= bq->max_bit_arrays) )
     {
         fprintf(stderr, "Bit manip problem!\n");
         exit(0);
     }
     //Setting the required bit in the appropriate bit array.
-    if (!(bq->bit_arrays[index_bit_array] & number_bitset))     //Need to set if not present already.
+    
+    ok = 0;
+    while (!ok)
     {
-        bq->bit_arrays[index_bit_array] |= number_bitset;
-        bq->num_items++;
+        #pragma omp flush
+        currentVal = bq->bit_arrays[index_bit_array];
+        if (!(currentVal & number_bitset) )
+            ok = __sync_bool_compare_and_swap(&(bq->bit_arrays[index_bit_array]), currentVal, bq->bit_arrays[index_bit_array] & number_bitset );
+        else
+            return 0;       //Somebody else set the same bit.
+        if (ok)
+           bq->num_items++;
     }
     return 1;
 }

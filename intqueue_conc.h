@@ -46,7 +46,7 @@ typedef struct {
 typedef struct {
   int *items;
   bit_queue_conc* bitqueue_conc;
-  int numitems, maxitems;
+  int numitems, maxitems, maxNumInts;
   int start_item_ptr, end_item_ptr;
   double add_time;
   double pop_time;
