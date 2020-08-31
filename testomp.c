@@ -7,7 +7,9 @@
 //
 
 #include "testomp.h"
+#include "stdlib.h"
 #include <omp.h>
+#include "intqueue_conc.h"
 
 int processedI = 0, left = 0;
 #pragma omp threadprivate(processedI, left)
@@ -70,11 +72,13 @@ main(int argc, char *argv[]) {
 //    printf("Will be testing sections\n");
     //sectioning();
     
-//    printf("Will be testing tasks:\n");
-//    tasking();
+    //printf("Will be testing tasks:\n");
+    tasking();
+    //printf("Will be testing parallel for:\n");
+    //fn2();
     
 //    simplyParll();
-      printbindinginfo();
+     // printbindinginfo();
 /*
 #pragma omp parallel for default(shared) private(i, delta, tid)  \
     schedule(dynamic,chunk)      \
@@ -195,14 +199,80 @@ void sectioning()
     }
 }
 
+#define QSIZE 500
+#define QMAXVAL 505
+void check_q_duplicates(queue_conc *qc)
+{
+    int items[QMAXVAL];
+    int i = 0, result;
+    for (i=0; i < QMAXVAL; i++)
+	items[i] = 0;
+    printf("Num of items in q=%d\n",qc->numitems);
+    for (i=0; i<qc->numitems; i++)
+    {
+        queue_conc_pop(qc, &result);
+	if (result < 0)
+		printf("Result returned at idx=%d is %d\n",i,result);
+	else if (result > QMAXVAL)
+		printf("Result returned at idx=%d is %d\n",i,result);
+	else
+	{
+		if (items[result] == 0)
+		    items[result] = 1;
+		else
+		    printf("At idx=%d, result=%d is duplicate\n",i, result);
+	}
+    }
+    printf("Done checking for duplicates\n");
+}
 
+void consume(queue_conc *qc)
+{
+    int items[QMAXVAL+1];
+    int i = 0, result;
+    int uniqueItems = 0;
+    for (i=0; i <= QMAXVAL; i++)
+        items[i] = 0;
+#pragma omp parallel private(i, result) shared(qc, items)
+    {
+        while (qc->numitems > 0)
+	{
+            result = 0;
+	    queue_conc_pop(qc, &result);
+	    if (result < 0)
+                printf("Result returned in thread=%d is %d\n",omp_get_thread_num(),result);
+            else if (result > QMAXVAL)
+                printf("Result returned in thread=%d is %d\n",omp_get_thread_num(),result);
+	    else
+            {
+#pragma omp critical
+               items[result]++;
+	    }        
+	}
+    }
+    for (i=0; i <= QMAXVAL; i++)
+    {
+        if (items[i] > 1)
+	   printf("Item %d popped %d times",i, items[i]);
+	else
+	   uniqueItems += items[i];
+    }
+    printf("%d uniqueItems popped\n", uniqueItems);
+
+}
 void tasking()
 {
-    int i = 0;
+    int i = 0, x=100, tid;
     int numThreads = 0;
     int *threadExecCounter = NULL;
-    int taskCount = 100000;
-#pragma omp parallel shared(threadExecCounter, numThreads)
+    int taskCount = 40;
+    int loopCount = 1010;
+    int sum = 0;
+    int sharedChangedByThread = -1;
+    int ok = 0;
+    queue_conc *qc = queue_conc_create(QSIZE, QMAXVAL);
+    int result;
+#pragma omp parallel shared(threadExecCounter, numThreads, qc) private(i,x)
     {
         #pragma omp single
         {
@@ -211,18 +281,50 @@ void tasking()
             memset(threadExecCounter,0,sizeof(int) * numThreads);
             printf("Number of threads is: %d; Number of tasks=%d\n", numThreads, taskCount);
             #pragma omp task untied
-                for (i = 0; i < taskCount; i++)
-                    #pragma omp task
-                        processItem(i, &threadExecCounter);
+	    {
+                for (i = 0; i < loopCount; i++)
+		{
+		    x= i/2 % QMAXVAL;
+		    if ((i % 100000) == 0)
+		    {
+		        tid = omp_get_thread_num();
+		        printf("This is i=%d, on thread=%d\n",i,tid);
+		    }
+                   #pragma omp task private(tid) firstprivate(i,x) priority(5) shared(sharedChangedByThread)
+		   {
+			tid = omp_get_thread_num();
+			ok =  __sync_bool_compare_and_swap(&sharedChangedByThread, -1, tid);
+			if (ok)
+				printf("Got ok for TID: %d\n",tid);
+			if (qc->numitems < QSIZE)
+			   queue_conc_add(qc, x);
+			else
+			{
+			   queue_conc_pop(qc, &result);
+			   printf("Q was full. Item popped = %d\n", result);
+			}
+			//printf("Into task");
+			//if (i < taskCount)
+			//#pragma omp critical
+                       	processItem(x, &threadExecCounter);
+		   }
+		}
+	    }
         }
     }
-    int sum = 0;
+    //int sum = 0;
     for (i=0; i< numThreads; i++)
     {
         printf("Thread %d executed %d items;  ", i, threadExecCounter[i]);
         sum += threadExecCounter[i];
     }
+    printf("\n\nTotal items in q=%d\n",qc->numitems);
+    printf("Total items in bitq=%d\n",qc->bitqueue_conc->num_items);
+    //check_q_duplicates(qc);
+    printf("Shared var changed by thread: %d", sharedChangedByThread);
     printf("\nTotal items= %d;\n",sum);
+    printf("Will now consume from the queue in parallel\n");
+    consume(qc);
 }
 
 void simplyParll()
@@ -278,7 +380,12 @@ void printbindinginfo()
 void processItem(int i, int **threadExecCounter)
 {
     int threadNum = omp_get_thread_num();
+    int x=0;
+//#pragma omp critical
     (*threadExecCounter)[threadNum]++;
+    //sleep(1);
+    for (int i = 0; i <10000000; i++)
+	    x++;
     //printf("Processing task for Item:%d in thread:%d.\n", i, threadNum);
 }
 

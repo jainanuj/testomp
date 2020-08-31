@@ -117,7 +117,7 @@ int queue_conc_add( queue_conc *q, int obj )
     if ( q->numitems >= q->maxitems )
     {
         fprintf(stderr, "Hey!  Queue's full!\n");
-        return 0;
+        return 1;
     }
 
     while (!ok)
@@ -308,13 +308,15 @@ int queue_conc_add_bit( bit_queue_conc *bq, int obj )
     {
         #pragma omp flush
         currentVal = bq->bit_arrays[index_bit_array];
+	//printf("In Add bit. Adding %d and currentVal = %lu\n",obj,currentVal);
         if (!(currentVal & number_bitset) )
-            ok = __sync_bool_compare_and_swap(&(bq->bit_arrays[index_bit_array]), currentVal, currentVal & number_bitset );
+            ok = __sync_bool_compare_and_swap(&(bq->bit_arrays[index_bit_array]), currentVal, currentVal|number_bitset );
         else
             return 0;       //Somebody else set the same bit.
         if (ok)
            bq->num_items++;
     }
+    //printf("Just added obj=%d and the new value is: %lu\n",obj, bq->bit_arrays[index_bit_array]);
     return 1;
 }
 
