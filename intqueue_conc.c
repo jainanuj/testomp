@@ -28,25 +28,23 @@ queue_conc *queue_conc_create( int maxitems, int max_val )
 {
     queue_conc *q; int i = 0;
 
-#ifdef BITQ_CONC
-  bit_queue_conc *bq;
-#endif
+    bit_queue_conc *bq;
 
-  q = (queue_conc *)malloc( sizeof(queue_conc) );
-  if (q == NULL) {
-    fprintf(stderr, "Out of memory!\n");
-    exit(0);
-  }
+    q = (queue_conc *)malloc( sizeof(queue_conc) );
+    if (q == NULL) {
+        fprintf(stderr, "Out of memory!\n");
+        exit(0);
+    }
 
-  q->maxitems = maxitems;
-  q->numitems = 0;
-  q->maxNumInts = maxitems + 2;
+    q->maxitems = maxitems;
+    q->numitems = 0;
+    q->maxNumInts = maxitems + 2;
 
-  q->items = (int *)malloc( q->maxNumInts * sizeof(int) );
-  if (q->items == NULL) {
-    fprintf(stderr, "Out of memory!\n");
-    exit(0);
-  }
+    q->items = (int *)malloc( q->maxNumInts * sizeof(int) );
+    if (q->items == NULL) {
+        fprintf(stderr, "Out of memory!\n");
+        exit(0);
+    }
     q->start_item_ptr = 0;
     q->end_item_ptr = 1;
     q->items[q->start_item_ptr] = START_PLACE;
@@ -55,21 +53,17 @@ queue_conc *queue_conc_create( int maxitems, int max_val )
     {
         q->items[i] = EMPTYVAL;
     }
-#ifdef BITQ_CONC
     bq = create_bit_queue_conc(max_val);
     q->bitqueue_conc = bq;
-#endif
     q->add_time = 0.0;
     q->pop_time = 0.0;
 
-  return q;
+    return q;
 }
 
-void destroy_queue(queue_conc *q)
+void destroy_queue_conc(queue_conc *q)
 {
-#ifdef BITQ
-    destroy_bit_queue(q->bitqueue);
-#endif
+    destroy_bit_queue_conc(q->bitqueue_conc);
     free(q->items);
     free(q);
 }
@@ -87,9 +81,7 @@ int empty_queue_conc( queue_conc *q)
     {
         q->items[i] = EMPTYVAL;
     }
-#ifdef BITQ_CONC
     empty_bit_queue_conc(q->bitqueue_conc);
-#endif
     return 0;
 }
 
@@ -105,14 +97,8 @@ int queue_conc_add( queue_conc *q, int obj )
 //    t_start = whenq();
     int ok = 0;
     
-#ifndef BITQ_CONC
-    pos = check_obj_present_in_q(q, obj);
-    if (pos != -1)
-        return 1;     //Item already present at position pos.
-#else
     if (check_bit_obj_present_conc(q->bitqueue_conc, obj))
         return 1;
-#endif
     
     if ( q->numitems >= q->maxitems )
     {
@@ -123,7 +109,7 @@ int queue_conc_add( queue_conc *q, int obj )
     while (!ok)
     {
 #pragma omp flush
-        ok = __sync_bool_compare_and_swap(&(q->items[ ((q->end_item_ptr + 1 ) % q->maxNumInts) ]), EMPTYVAL, END_PLACE);
+        ok = CAS(&(q->items[ ((q->end_item_ptr + 1 ) % q->maxNumInts) ]), EMPTYVAL, END_PLACE);
         if (ok)
         {
             if (!queue_conc_add_bit(q->bitqueue_conc, obj))
@@ -164,7 +150,7 @@ int queue_conc_pop(queue_conc *q, int *result )
     while (!ok)
     {
 #pragma omp flush
-        ok = __sync_bool_compare_and_swap(&(q->items[q->start_item_ptr]), START_PLACE, START_TRANS);
+        ok = CAS(&(q->items[q->start_item_ptr]), START_PLACE, START_TRANS);
         if (ok)
         {
             if ( (q->numitems <= 0) || (q->start_item_ptr < 0) || (q->items[((q->start_item_ptr + 1 ) % q->maxNumInts)] == END_PLACE))
@@ -194,19 +180,22 @@ int queue_conc_pop(queue_conc *q, int *result )
 }
 
 
-
 int queue_has_items(queue_conc *q)
 {
+#pragma omp flush
     return q->numitems;
 }
 
-int bit_queue_has_items(bit_queue_conc *bq)
-{
-    return bq->num_items;
-}
+
 
 
 /*********----------------------------------------------------**************/
+
+int bit_queue_has_items(bit_queue_conc *bq)
+{
+#pragma omp flush
+    return bq->num_items;
+}
 
 bit_queue_conc *create_bit_queue_conc( int max_items)
 {
@@ -217,9 +206,7 @@ bit_queue_conc *create_bit_queue_conc( int max_items)
         fprintf(stderr, "Out of memory!\n");
         exit(0);
     }
-    
-    //q->maxitems = max_items;
-    
+        
     num_bit_arrays = (max_items / BIT_ARRAY_SIZE) + 1;
     bq->bit_arrays = (unsigned long *)malloc(sizeof(unsigned long) * (num_bit_arrays) );
     if (bq->bit_arrays == NULL) {
@@ -280,7 +267,7 @@ int bit_queue_conc_pop( bit_queue_conc *bq, int obj )
 #pragma omp flush
         currentVal = bq->bit_arrays[index_bit_array];
         if (currentVal & number_bit_unset)      //Only if bit present.
-            ok = __sync_bool_compare_and_swap(&(bq->bit_arrays[index_bit_array]), currentVal, currentVal & number_bit_unset_comp);
+            ok = CAS(&(bq->bit_arrays[index_bit_array]), currentVal, currentVal & number_bit_unset_comp);
         else
             return 0;       //Bit already unset by somebody else.
         if (ok)
@@ -310,7 +297,7 @@ int queue_conc_add_bit( bit_queue_conc *bq, int obj )
         currentVal = bq->bit_arrays[index_bit_array];
 	//printf("In Add bit. Adding %d and currentVal = %lu\n",obj,currentVal);
         if (!(currentVal & number_bitset) )
-            ok = __sync_bool_compare_and_swap(&(bq->bit_arrays[index_bit_array]), currentVal, currentVal|number_bitset );
+            ok = CAS(&(bq->bit_arrays[index_bit_array]), currentVal, currentVal|number_bitset );
         else
             return 0;       //Somebody else set the same bit.
         if (ok)
@@ -321,13 +308,15 @@ int queue_conc_add_bit( bit_queue_conc *bq, int obj )
 }
 
 
-void destroy_bit_queue(bit_queue_conc *bq)
+void destroy_bit_queue_conc(bit_queue_conc *bq)
 {
     free(bq->bit_arrays);
     free (bq);
 }
 
-void print_bit_queue(bit_queue_conc *bq, char *bit_queue_file)
+
+
+void print_bit_queue_conc(bit_queue_conc *bq, char *bit_queue_file)
 {
     unsigned long number_bitset = 0x1, current_bitArray;        //The number with the required bit set.
     FILE *f_bitfile;
