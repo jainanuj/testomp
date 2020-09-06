@@ -180,22 +180,9 @@ int queue_conc_pop(queue_conc *q, int *result )
 }
 
 
-int queue_has_items(queue_conc *q)
-{
-#pragma omp flush
-    return q->numitems;
-}
-
-
 
 
 /*********----------------------------------------------------**************/
-
-int bit_queue_has_items(bit_queue_conc *bq)
-{
-#pragma omp flush
-    return bq->num_items;
-}
 
 bit_queue_conc *create_bit_queue_conc( int max_items)
 {

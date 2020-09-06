@@ -10,6 +10,7 @@
 #include "stdlib.h"
 #include <omp.h>
 #include "intqueue_conc.h"
+#include "intqueue.h"
 
 int processedI = 0, left = 0;
 #pragma omp threadprivate(processedI, left)
@@ -226,7 +227,7 @@ void check_q_duplicates(queue_conc *qc)
     printf("Done checking for duplicates\n");
 }
 
-void consume(queue_conc *qc)
+void consume(queue *qc)
 {
     int items[QMAXVAL+1];
     int i = 0, result;
@@ -238,7 +239,8 @@ void consume(queue_conc *qc)
         while (qc->numitems > 0)
 	{
             result = 0;
-	    queue_conc_pop(qc, &result);
+//	    queue_conc_pop(qc, &result);
+        queue_pop(qc, &result);
 	    if (result < 0)
                 printf("Result returned in thread=%d is %d\n",omp_get_thread_num(),result);
             else if (result > QMAXVAL)
@@ -270,7 +272,8 @@ void tasking()
     int sum = 0;
     int sharedChangedByThread = -1;
     int ok = 0;
-    queue_conc *qc = queue_conc_create(QSIZE, QMAXVAL);
+//    queue_conc *qc = queue_conc_create(QSIZE, QMAXVAL);
+    queue *qc = queue_create(QSIZE, QMAXVAL);
     int result;
 #pragma omp parallel shared(threadExecCounter, numThreads, qc) private(i,x)
     {
@@ -297,10 +300,10 @@ void tasking()
 			if (ok)
 				printf("Got ok for TID: %d\n",tid);
 			if (qc->numitems < QSIZE)
-			   queue_conc_add(qc, x);
+			   queue_add(qc, x);
 			else
 			{
-			   queue_conc_pop(qc, &result);
+			   queue_pop(qc, &result);
 			   printf("Q was full. Item popped = %d\n", result);
 			}
 			//printf("Into task");
@@ -319,7 +322,8 @@ void tasking()
         sum += threadExecCounter[i];
     }
     printf("\n\nTotal items in q=%d\n",qc->numitems);
-    printf("Total items in bitq=%d\n",qc->bitqueue_conc->num_items);
+//    printf("Total items in bitq=%d\n",qc->bitqueue_conc->num_items);
+    printf("Total items in bitq=%d\n",qc->bitqueue->num_items);
     //check_q_duplicates(qc);
     printf("Shared var changed by thread: %d", sharedChangedByThread);
     printf("\nTotal items= %d;\n",sum);
@@ -380,11 +384,11 @@ void printbindinginfo()
 void processItem(int i, int **threadExecCounter)
 {
     int threadNum = omp_get_thread_num();
-    int x=0;
+    int x=0; int j = 0;
 //#pragma omp critical
     (*threadExecCounter)[threadNum]++;
     //sleep(1);
-    for (int i = 0; i <10000000; i++)
+    for (j = 0; j <10000000; i++)
 	    x++;
     //printf("Processing task for Item:%d in thread:%d.\n", i, threadNum);
 }
