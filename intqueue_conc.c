@@ -9,6 +9,7 @@
 
 
 #include <sys/time.h>
+#include <omp.h>
 #include "intqueue_conc.h"
 
 /* don't use floats with this function -- you'll run into precision
@@ -156,10 +157,9 @@ int queue_conc_deq( queue_conc *q, unsigned int *result )
 }
 
 
-int queue_conc_has_items(queue_conc *q)
+unsigned int queue_conc_has_items(queue_conc *q)
 {
-    if (q->FRONT < q->REAR) return 1;
-    else return 0;
+    return (q->REAR - q->FRONT);
 }
 
 /*********----------------------------------------------------**************/
@@ -221,7 +221,7 @@ int bf_atomic_unset(bf_conc *bq, int obj )
     unsigned long number_bit_unset = 0x1 << set_bit, number_bit_unset_comp;        //The number with the required bit set.
     number_bit_unset_comp = (~number_bit_unset) & MAX_DEB_SEQ_SIZE;
     
-#pragma omp atomic
+#pragma omp atomic update
     bq->bit_arrays[index_bit_array] &= number_bit_unset_comp;
     return 1;
 }
@@ -246,7 +246,7 @@ unsigned long check_bit_obj_present_conc( bf_conc *bq, int obj )
         exit(0);
     }
     //will return non-zero if the bit is already set else zero.
-#pragma omp atomic
-    retVal = bq->bit_arrays[index_bit_array] & number_bitset;
-    return retVal;
+#pragma omp atomic read
+    retVal = bq->bit_arrays[index_bit_array];
+    return (retVal & number_bitset);
 }

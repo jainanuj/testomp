@@ -52,7 +52,7 @@ typedef struct {
 queue_conc* queue_conc_create( int maxitems, int max_val );
 int queue_conc_enq( queue_conc *q, int obj );
 int queue_conc_deq( queue_conc *q, unsigned int *result );
-int queue_conc_has_items(queue_conc *q);
+unsigned int queue_conc_has_items(queue_conc *q);
 int empty_queue_conc( queue_conc *q);
 void destroy_queue_conc(queue_conc *q);
 
